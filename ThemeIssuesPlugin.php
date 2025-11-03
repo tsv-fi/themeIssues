@@ -13,7 +13,12 @@
  * @brief ThemeIssues plugin class
  */
 
-import('lib.pkp.classes.plugins.GenericPlugin');
+ namespace APP\plugins\generic\themeIssues;
+
+ use PKP\plugins\GenericPlugin;
+ use APP\plugins\generic\themeIssues\pages\ThemeIssuesHandler;
+ use PKP\plugins\Hook;
+ use APP\facades\Repo;
 
 class ThemeIssuesPlugin extends GenericPlugin {
 
@@ -27,17 +32,31 @@ class ThemeIssuesPlugin extends GenericPlugin {
 		$success = parent::register($category, $path);
 		if ($success && $this->getEnabled()) {
 
-			HookRegistry::register('LoadHandler', array($this, 'loadPageHandler'));
+			Hook::Add('LoadHandler', array($this, 'loadPageHandler'));
 
 			// Handle issue form
-			HookRegistry::register('Templates::Editor::Issues::IssueData::AdditionalMetadata', array($this, 'addIssueFormFields'));
-			HookRegistry::register('issuedao::getAdditionalFieldNames', array($this, 'addIssueDAOFieldNames'));
-			HookRegistry::register('issueform::readuservars', array($this, 'readIssueFormFields'));
-			HookRegistry::register('issueform::initdata', array($this, 'initDataIssueFormFields'));
-			HookRegistry::register('issueform::execute', array($this, 'executeIssueFormFields'));
+			Hook::Add('Templates::Editor::Issues::IssueData::AdditionalMetadata', array($this, 'addIssueFormFields'));
+			Hook::Add('issuedao::getAdditionalFieldNames', array($this, 'addIssueDAOFieldNames'));
+			Hook::Add('issueform::readuservars', array($this, 'readIssueFormFields'));
+			Hook::Add('issueform::initdata', array($this, 'initDataIssueFormFields'));
+			Hook::Add('issueform::execute', array($this, 'executeIssueFormFields'));
+			Hook::add('Schema::get::issue', array($this, 'addToSchema'));
 		}
 		return $success;
 	}
+
+	public function addToSchema($hookName, $args) {
+		$schema = $args[0];
+		$prop = '{
+			"type": "boolean",
+			"apiSummary": true,
+			"validation": [
+				"nullable"
+			]
+		}';
+		$schema->properties->isThemeIssue = json_decode($prop);
+	}
+
 
 	/**
 	 * @copydoc Plugin::getDisplayName()
@@ -59,12 +78,10 @@ class ThemeIssuesPlugin extends GenericPlugin {
 	public function loadPageHandler($hookName, $args) {
 		$page = $args[0];
 		if ($this->getEnabled() && $page === 'themeissues') {
-			$this->import('pages/ThemeIssuesHandler');
-			define('HANDLER_CLASS', 'ThemeIssuesHandler');
-			return true;
+            define('HANDLER_CLASS', ThemeIssuesHandler::class);
+            return Hook::ABORT;
 		}
-
-		return false;
+		return Hook::CONTINUE;
 	}
 
 	/**
@@ -91,7 +108,7 @@ class ThemeIssuesPlugin extends GenericPlugin {
 	 */
 	public function executeIssueFormFields($hookName, $args) {
 		$issueForm = $args[0];
-		$issue = $args[1];
+    	$issue = $issueForm->issue;
 
 		// The issueform::execute hook fires twice, once at the start of the
 		// method when no issue exists. Only update the object during the
@@ -100,9 +117,9 @@ class ThemeIssuesPlugin extends GenericPlugin {
 			return;
 		}
 
-		$issue->setData('isThemeIssue', $issueForm->getData('isThemeIssue'));
-		$issueDao = DAORegistry::getDAO('IssueDAO');
-		$issueDao->updateObject($issue);
+		$issue->setData('isThemeIssue', (bool) $issueForm->getData('isThemeIssue'));
+		Repo::issue()->edit($issue, []);
+
 	}
 
 	/**

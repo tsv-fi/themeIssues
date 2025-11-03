@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @file plugins/generic/themeIssues/pages/BrowseBySectionHandler.inc.php
+ * @file plugins/generic/themeIssues/pages/ThemeIssuesHandler.inc.php
  *
  * Copyright (c) 2014-2020 Simon Fraser University
  * Copyright (c) 2003-2020 John Willinsky
@@ -13,20 +13,26 @@
  * @brief Handle reader-facing router requests
  */
 
-import('classes.handler.Handler');
+ namespace APP\plugins\generic\themeIssues\pages;
 
-class ThemeIssuesHandler extends Handler {
+use APP\core\Request;
+use APP\template\TemplateManager;
+use APP\core\Services;
+use APP\facades\Repo;
+use APP\issue\Collector;
+use PKP\security\authorization\ContextRequiredPolicy;
+use APP\security\authorization\OjsJournalMustPublishPolicy;
+use PKP\plugins\PluginRegistry;
+
+
+class ThemeIssuesHandler extends \APP\handler\Handler {
 
 	/**
 	 * @copydoc PKPHandler::authorize()
 	 */
 	function authorize($request, &$args, $roleAssignments) {
-		import('lib.pkp.classes.security.authorization.ContextRequiredPolicy');
 		$this->addPolicy(new ContextRequiredPolicy($request));
-
-		import('classes.security.authorization.OjsJournalMustPublishPolicy');
 		$this->addPolicy(new OjsJournalMustPublishPolicy($request));
-
 		return parent::authorize($request, $args, $roleAssignments);
 	}
 
@@ -39,15 +45,11 @@ class ThemeIssuesHandler extends Handler {
 		$context = $request->getContext();
 		$plugin = PluginRegistry::getPlugin('generic', 'themeissuesplugin');
 
-		$params = array(
-			'contextId' => $context->getId(),
-			'orderBy' => 'seq',
-			'orderDirection' => 'ASC',
-			'count' => $count,
-			'offset' => $offset,
-			'isPublished' => true,
-		);
-		$issues = iterator_to_array(Services::get('issue')->getMany($params));
+        $issues = Repo::issue()->getCollector()
+            ->filterByContextIds([$context->getId()])
+            ->orderBy(Collector::ORDERBY_SEQUENCE)
+			->filterByPublished(true)
+            ->getMany();
 		
 		$themeIssues = [];
 		foreach ($issues as $issue) {
